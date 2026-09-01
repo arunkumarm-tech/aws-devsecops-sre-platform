@@ -1,0 +1,51 @@
+# Terraform
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+
+# Terraform variables — may contain secrets
+*.tfvars
+*.tfvars.json
+!example.tfvars
+
+# AWS / credentials
+.aws/
+credentials
+*.pem
+*.key
+
+# Environment
+.env
+.env.*
+
+# Kubernetes
+kubeconfig
+.kubeconfig
+*.kubeconfig
+
+# macOS
+.DS_Store
+
+# Editor
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Security scan output
+trivy-results.*
+checkov-results.*
+sbom.*
