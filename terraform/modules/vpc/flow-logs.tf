@@ -1,6 +1,8 @@
 resource "aws_cloudwatch_log_group" "flow_logs" {
+  # checkov:skip=CKV_AWS_338:Retention is a deliberate cost decision. Flow logs here support short-term investigation and traffic verification, not long-term compliance. A one-year retention is a production control tied to a compliance requirement that does not exist in this account.
   name              = "/aws/vpc-flow-logs/${var.name_prefix}"
   retention_in_days = var.flow_log_retention_days
+  kms_key_id        = aws_kms_key.flow_logs.arn
 }
 
 data "aws_iam_policy_document" "flow_logs_assume" {

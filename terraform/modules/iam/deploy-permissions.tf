@@ -44,6 +44,8 @@ resource "aws_iam_role_policy_attachment" "tfstate_access" {
 # already on the resource, so this role cannot touch infrastructure
 # it did not create.
 data "aws_iam_policy_document" "infrastructure" {
+  # checkov:skip=CKV_AWS_356:The NetworkingRead statement uses Resource = "*" because ec2:Describe* actions do not support resource-level permissions or the aws:ResourceTag condition key. AWS itself only permits "*" for these actions. Every mutating action in this policy is constrained by tag condition.
+  # checkov:skip=CKV_AWS_107:iam:PassRole is isolated in its own statement, scoped to roles matching this project's name prefix, and constrained by iam:PassedToService to the flow log service. Checkov does not evaluate condition blocks, so the finding persists despite the constraint being present.
   statement {
     sid    = "NetworkingRead"
     effect = "Allow"
@@ -117,6 +119,7 @@ data "aws_iam_policy_document" "infrastructure" {
       values   = [var.project_tag]
     }
   }
+
   statement {
     sid    = "FlowLogDestination"
     effect = "Allow"
@@ -133,15 +136,21 @@ data "aws_iam_policy_document" "infrastructure" {
     resources = ["arn:aws:logs:${data.aws_region.current.name}:${data.aws_caller_identity.current.account_id}:log-group:/aws/vpc-flow-logs/*"]
   }
 
+  # Role management and role passing are deliberately separate statements.
+  #
+  # An earlier version put iam:PassRole in the same statement as
+  # iam:CreateRole and applied the iam:PassedToService condition to all
+  # of them. CreateRole cannot satisfy that condition, so role creation
+  # would have been silently denied at deploy time. Splitting them lets
+  # the condition constrain only the action it applies to.
   statement {
-    sid    = "FlowLogServiceRole"
+    sid    = "FlowLogRoleManagement"
     effect = "Allow"
 
     actions = [
       "iam:CreateRole",
       "iam:DeleteRole",
       "iam:GetRole",
-      "iam:PassRole",
       "iam:PutRolePolicy",
       "iam:DeleteRolePolicy",
       "iam:GetRolePolicy",
@@ -149,13 +158,29 @@ data "aws_iam_policy_document" "infrastructure" {
       "iam:ListAttachedRolePolicies",
     ]
 
-    # Only roles matching this project's naming convention.
-    # This role cannot create or modify arbitrary IAM roles.
+    # Only roles matching this project's naming convention. This role
+    # cannot create or modify arbitrary IAM roles, which closes the
+    # obvious privilege escalation path.
+    resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name_prefix}-*"]
+  }
+
+  statement {
+    sid    = "PassFlowLogRole"
+    effect = "Allow"
+
+    actions   = ["iam:PassRole"]
     resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name_prefix}-*"]
 
+    # Constrained by destination service as well as by role name.
+    # PassRole without a service constraint lets a role be handed to
+    # any service, which is a known escalation path.
+    condition {
+      test     = "StringEquals"
+      variable = "iam:PassedToService"
+      values   = ["vpc-flow-logs.amazonaws.com"]
+    }
   }
 }
-
 
 resource "aws_iam_policy" "infrastructure" {
   name        = "${var.name_prefix}-infrastructure"
