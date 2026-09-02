@@ -13,3 +13,11 @@ output "private_subnet_ids" {
 output "flow_log_group_name" {
   value = module.vpc.flow_log_group_name
 }
+
+output "github_deploy_role_arn" {
+  value = module.iam.github_deploy_role_arn
+}
+
+output "github_oidc_provider_arn" {
+  value = module.iam.github_oidc_provider_arn
+}
