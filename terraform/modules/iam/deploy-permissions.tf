@@ -36,35 +36,87 @@ resource "aws_iam_role_policy_attachment" "tfstate_access" {
   policy_arn = aws_iam_policy.tfstate_access.arn
 }
 
-# Infrastructure permissions. Scoped by service, not by resource.
+# Infrastructure permissions, split by mutability.
 #
-# TRADE-OFF, documented deliberately:
-# Resource-level scoping is impractical here because Terraform creates
-# resources whose ARNs do not exist until creation time. A policy that
-# named specific VPC or subnet ARNs could never create the first one.
-# Service-level scoping is the pragmatic boundary: this role can manage
-# networking, but cannot touch IAM users, billing, or Organizations.
+# Read-only actions cannot be tag-constrained, so they remain broad.
+# Create actions are constrained by the tag Terraform applies at
+# creation. Modify and delete actions are constrained by the tag
+# already on the resource, so this role cannot touch infrastructure
+# it did not create.
 data "aws_iam_policy_document" "infrastructure" {
   statement {
-    sid    = "NetworkingManagement"
+    sid    = "NetworkingRead"
     effect = "Allow"
 
     actions = [
-      "ec2:*Vpc*",
-      "ec2:*Subnet*",
-      "ec2:*Route*",
-      "ec2:*Gateway*",
-      "ec2:*Address*",
-      "ec2:*SecurityGroup*",
-      "ec2:*NetworkAcl*",
-      "ec2:*FlowLogs*",
-      "ec2:*Tags*",
       "ec2:Describe*",
+      "ec2:Get*",
     ]
 
     resources = ["*"]
   }
 
+  statement {
+    sid    = "NetworkingCreate"
+    effect = "Allow"
+
+    actions = [
+      "ec2:CreateVpc",
+      "ec2:CreateSubnet",
+      "ec2:CreateRouteTable",
+      "ec2:CreateInternetGateway",
+      "ec2:CreateNatGateway",
+      "ec2:CreateSecurityGroup",
+      "ec2:CreateFlowLogs",
+      "ec2:CreateTags",
+      "ec2:AllocateAddress",
+    ]
+
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:RequestTag/Project"
+      values   = [var.project_tag]
+    }
+  }
+
+  statement {
+    sid    = "NetworkingModify"
+    effect = "Allow"
+
+    actions = [
+      "ec2:DeleteVpc",
+      "ec2:DeleteSubnet",
+      "ec2:DeleteRouteTable",
+      "ec2:DeleteInternetGateway",
+      "ec2:DeleteNatGateway",
+      "ec2:DeleteSecurityGroup",
+      "ec2:DeleteFlowLogs",
+      "ec2:DeleteTags",
+      "ec2:ReleaseAddress",
+      "ec2:AttachInternetGateway",
+      "ec2:DetachInternetGateway",
+      "ec2:AssociateRouteTable",
+      "ec2:DisassociateRouteTable",
+      "ec2:CreateRoute",
+      "ec2:DeleteRoute",
+      "ec2:ModifyVpcAttribute",
+      "ec2:ModifySubnetAttribute",
+      "ec2:AuthorizeSecurityGroupIngress",
+      "ec2:AuthorizeSecurityGroupEgress",
+      "ec2:RevokeSecurityGroupIngress",
+      "ec2:RevokeSecurityGroupEgress",
+    ]
+
+    resources = ["*"]
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/Project"
+      values   = [var.project_tag]
+    }
+  }
   statement {
     sid    = "FlowLogDestination"
     effect = "Allow"
@@ -100,8 +152,10 @@ data "aws_iam_policy_document" "infrastructure" {
     # Only roles matching this project's naming convention.
     # This role cannot create or modify arbitrary IAM roles.
     resources = ["arn:aws:iam::${data.aws_caller_identity.current.account_id}:role/${var.name_prefix}-*"]
+
   }
 }
+
 
 resource "aws_iam_policy" "infrastructure" {
   name        = "${var.name_prefix}-infrastructure"

@@ -15,4 +15,5 @@ module "iam" {
   github_repo    = "aws-devsecops-sre-platform"
   github_branch  = "main"
   tfstate_bucket = "devsecops-sre-tfstate-160827082645"
+  project_tag    = var.project_name
 }

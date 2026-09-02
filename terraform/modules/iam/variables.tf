@@ -23,3 +23,8 @@ variable "tfstate_bucket" {
   description = "Name of the S3 bucket holding Terraform state."
   type        = string
 }
+
+variable "project_tag" {
+  description = "Value of the Project tag used to constrain EC2 permissions."
+  type        = string
+}
